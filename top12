@@ -171,3 +171,5 @@ plot <- c |> mutate(jugador = ifelse(jug %in% c("D. Musa", "E. Happ", "E. Tavare
     strip.text.x = element_markdown(face = "bold", color = pal_font, size = 12, hjust = 0.5)
   )
 ggsave("superheroes.png", plot, w = 12, h = 12 * 1.05, dpi = "retina")
+
+#ivovillanueva @elcheff idea original Tanya Shapyro
