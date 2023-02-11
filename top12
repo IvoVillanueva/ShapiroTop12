@@ -27,9 +27,8 @@ tm_acb <- read.csv("https://raw.githubusercontent.com/IvoVillanueva/csv2023/main
 
 
 caras <- read.csv("https://raw.githubusercontent.com/IvoVillanueva/csv2023/main/caras.csv") |>
-  select(jugador = license_licenseAbbrev, foto = url_4) |> # adapto los nombres para que luego sea mas facil unir las tablas
-  mutate(foto = ifelse(!str_detect(foto, "https:"), paste0("https:", foto), foto)) # algunos enlaces vienen sin el https
-
+  select(jugador = license_licenseAbbrev, foto = url_4)  # adapto los nombres para que luego sea mas facil unir las tablas
+ 
 
 url <- "https://www.rincondelmanager.com/smgr/estadisticas_acb.php?tipo=medias" |>
   read_html() |>
