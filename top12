@@ -9,7 +9,7 @@ library(rvest)
 library(janitor)
 library(ggtext)
 library(ggimage)
-library(cropcircles) # libreria que envuelve las fotos en circulos por Dan Oehme
+library(cropcircles) # libreria que envuelve las fotos en circulos por Dan Oehm
 library(grid)
 library(paletteer)
 library(geomtextpath)
