@@ -1,0 +1,173 @@
+
+
+# Librerias ---------------------------------------------------------------
+
+
+
+library(tidyverse)
+library(rvest)
+library(janitor)
+library(ggtext)
+library(ggimage)
+library(cropcircles) # libreria que envuelve las fotos en circulos por Dan Oehme
+library(grid)
+library(paletteer)
+library(geomtextpath)
+library(datapasta)
+
+
+# Cargar los datos y scrape  Data Wrangling ----------------------------------------
+
+
+
+tm_acb <- read.csv("https://raw.githubusercontent.com/IvoVillanueva/csv2023/main/logos2023.csv") %>% # data of logos colors and names
+  select(eq = abb, logo, color) |>
+  mutate(logo = ifelse(eq == "GIR", "https://raw.githubusercontent.com/IvoVillanueva/csv2023/main/oie_c2OL6RXVGDVU.jpg", logo)) |> # cambio el logo porque con el fondo negro no se vería
+  drop_na()
+
+
+caras <- read.csv("https://raw.githubusercontent.com/IvoVillanueva/csv2023/main/caras.csv") |>
+  select(jugador = license_licenseAbbrev, foto = url_4) |> # adapto los nombres para que luego sea mas facil unir las tablas
+  mutate(foto = ifelse(!str_detect(foto, "https:"), paste0("https:", foto), foto)) # algunos enlaces vienen sin el https
+
+
+url <- "https://www.rincondelmanager.com/smgr/estadisticas_acb.php?tipo=medias" |>
+  read_html() |>
+  html_element("table#tTodos") |>
+  html_table(dec = ",") |> #en esta pagina los decimales están con comas y poniendo esto lo convierte en puntos y asi ya están como numeros y no como caracteres
+  clean_names() |>
+  select(jug:eq, ptos:val) |>
+  filter(jug != "D. Bender", val > mean(val)) |>
+  mutate(eq = case_when(#cambios de nombres para poder hacer el leftjoint
+    eq == "CBG" ~ "COV",
+    eq == "OBR" ~ "MOB",
+    eq == "RMA" ~ "RMB",
+    eq == "BAS" ~ "BKN",
+    eq == "FCB" ~ "BAR",
+    eq == "CAN" ~ "LNT",
+    eq == "ZAR" ~ "CAZ",
+    eq == "BLB" ~ "SBB",
+    eq == "MUR" ~ "UCM",
+    eq == "MAN" ~ "BAX",
+    TRUE ~ eq
+  )) |>
+  arrange(desc(val)) |>
+  slice(1:12)
+
+mean(url$val)#para saber desde que valoración se filtra
+
+#esta linea sale de datapasta::vector_paste(url$jug)
+
+players <- c("J. Rivero", "S. Evans", "A. Tomic", "M. Gasol", "C. Jones", "D. Ristic", "D. Musa", "M. Costello", "T. Scrubb", "E. Happ", "E. Tavares", "G. Yabusele")
+
+
+c <- url |>
+  mutate(
+    "Br-Bp" = br - bp,
+    "Tap-Tap_R" = tap - tap_r,
+    "Fc-Fr" = fr - fc,
+    "T1c-T1i" = t1i - t1c,
+    "T2c-T2i" = t2i - t2c,
+    "T3c-T3i" = t3i - t3c
+  ) |>
+  select(jug:ptos, reb, asis, "Br-Bp":"T3c-T3i", val) |>
+  mutate(across(c(ptos:val), rank) / nrow(url) * 100) |>#calcular percentiles
+  filter(jug %in% c(players)) |>
+  pivot_longer(-c(jug:eq), names_to = "stats", values_to = "value") |>
+  left_join(tm_acb) |>
+  left_join(caras) |>
+  mutate(foto = circle_crop(foto))
+
+# df$quantiley06 = rank(df$avgy06)/nrow(df)
+library(geomtextpath)
+
+# custom dataframe for line segments (adaptado a los datos pero idea de Tanya Shapiro)
+segments <- data.frame(
+  x1 = rep(0, 5),
+  x2 = rep(9.5, 5),
+  y1 = c(0, 25, 50, 75, 100),
+  y2 = c(0, 25, 50, 75, 100)
+)
+labels <- data.frame(
+  y = c(25, 50, 75, 100),
+  x = rep(0.25, 4)
+)
+# set color aesthetics as variables
+# palettes
+pal_font <- "white"
+pal_bg <- "#131314"
+pal_line <- "#D0D0D0"
+pal <- c("#E1341A", "#FF903B", "#ffe850", "#27f897", "#4bd8ff", "#6F02CE")
+
+
+
+# Funciones para incluir los logos de los equipos -------------------------
+
+# función para los logos mas pequeños
+
+link_to_img <- function(x, width = 41) {
+  glue::glue("<img src='{x}' width='{width}'/><br><br>")
+}
+# función para los logos mas grandes
+link_to_img1 <- function(x, width = 35) {
+  glue::glue("<img src='{x}' width='{width}'/><br><br>")
+}
+plot <- c |> mutate(jugador = ifelse(jug %in% c("D. Musa", "E. Happ", "E. Tavares", "G. Yabusele", "M. Gasol"),
+  paste0(link_to_img(logo), toupper(jugador)), paste0(link_to_img1(logo), toupper(jugador))
+)) |> # ifelse anadidado ya que los logos no tienen el mismo tamaño
+  ggplot(aes(x = stats, y = value, fill = stats)) +
+  coord_polar() +
+  # blank canvas
+  # new x labels
+  geom_textpath(
+    inherit.aes = FALSE,
+    mapping = aes(x = stats, label = toupper(stats), y = 130),
+    fontface = "bold", upright = TRUE, text_only = TRUE, size = 2.5, color = "white"
+  ) +
+  # new grid lines - leave space to add in our y axis labels later
+  geom_segment(
+    inherit.aes = FALSE,
+    data = segments,
+    mapping = aes(x = x1, xend = x2, y = y1, yend = y2), size = 0.35, color = "white"
+  ) +
+  # overlay dataset
+  geom_col(width = .8, show.legend = FALSE) +
+
+  # create donut hole and add some room at the top with limits (our labels are at 130)
+  scale_y_continuous(limits = c(-70, 135)) +
+  # add the y axis labels
+  geom_textsegment(
+    inherit.aes = FALSE,
+    data = labels,
+    mapping = aes(x = 9.5, xend = 10.5, y = y, yend = y, label = y),
+    color = pal_line, textcolour = pal_font, linewidth = 0.45, size = 2.5
+  ) +
+  # add portrain in center
+  geom_image(aes(y = -70, x = 1, image = foto, color = color), size = 0.235) + # esto añade un circulo de color a la foto
+  geom_image(aes(y = -70, x = 1, image = foto), size = 0.225) +
+  scale_color_identity() +
+  # customize bar colors
+  scale_fill_manual(values = paletteer_d("ggthemes::gdoc")) +
+  facet_wrap(~ fct_reorder(jugador, -value)) +
+  # add plot titles and labels
+  labs(
+    title = "VALORACIÓN MEDIA TOP 12",
+    subtitle = "Percentil por Jugador en El Supermanager Hasta la J12. Habilidades de 0 a 100",
+    caption = "<br> **Datos** *@elrincondelsm* **Gráfico** *Ivo Villanueva* &bull;   <span style='color:#00acee;font-family: \"Font Awesome 5 Brands\"'>&#xf099;</span> **@elcheff**"
+  ) +
+  # make some tweaks to plot theme
+  theme_minimal() +
+  theme(
+    text = element_text(color = pal_font),
+    plot.background = element_rect(fill = pal_bg),
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 22, margin = margin(t = 5)),
+    plot.subtitle = element_text(hjust = 0.5, margin = margin(t = 5, b = 20)),
+    plot.caption = element_markdown(margin = margin(t = 12)),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = margin(t = 10, b = 5, l = 10, r = 10),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    strip.text.x = element_markdown(face = "bold", color = pal_font, size = 12, hjust = 0.5)
+  )
+ggsave("superheroes.png", plot, w = 12, h = 12 * 1.05, dpi = "retina")
